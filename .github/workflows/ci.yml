@@ -1,0 +1,99 @@
+name: CI and release
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  audit:
+    name: History and privacy audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check tracked files and all reachable history
+        run: python3 scripts/audit.py --history
+      - name: Download verified Gitleaks
+        run: |
+          curl --fail --silent --show-error --location https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: Scan full history for secrets
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --log-opts=--all .'
+  macos:
+    name: Test and build (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Unit and dry-run integration tests
+        run: python3 scripts/test.py
+      - name: Core coverage gates
+        run: python3 scripts/coverage.py
+      - name: Native installer fixtures
+        run: python3 scripts/installer_tests.py
+      - name: Build and verify downloadable application
+        run: python3 scripts/package.py --arch "${{ matrix.arch }}" --version "0.4.${{ github.run_number }}"
+      - name: Validate release archive
+        run: python3 scripts/check_package.py dist/*.zip
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-${{ matrix.arch }}
+          path: coverage/*.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+  check:
+    name: CI
+    if: always()
+    needs: [audit, macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every prerequisite
+        env:
+          AUDIT: ${{ needs.audit.result }}
+          MACOS: ${{ needs.macos.result }}
+        run: test "$AUDIT" = success && test "$MACOS" = success
+  release:
+    name: Publish version and downloads
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Create release after successful tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: 0.4.${{ github.run_number }}
+          COMMIT: ${{ github.sha }}
+        run: python3 scripts/release.py

@@ -1,0 +1,33 @@
+.DS_Store
+.build/
+__pycache__/
+*.pyc
+*.app/
+FFB-Test
+*.dylib
+*.log
+*.sock
+/test-app-entitlements.plist
+/work/
+
+# Build products, coverage and release archives
+/dist/
+/coverage/
+*.profraw
+*.profdata
+*.zip
+*.tar.gz
+*.dSYM/
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.*
+secrets.*
+# Editor files
+.vscode/
+.idea/
