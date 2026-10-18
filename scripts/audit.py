@@ -36,7 +36,7 @@ def main():
         for commit in git('rev-list','--all').decode().splitlines():
             metadata=git('show','-s','--format=%ae%n%ce',commit).decode().splitlines()
             for address in metadata:
-                if not address.endswith('@users.noreply.github.com'):
+                if not (address.endswith('@users.noreply.github.com') or address == 'noreply@github.com'):
                     failures.append((commit[:12],'non-noreply-author-email'))
             for entry in git('ls-tree','-rz',commit).split(b'\0'):
                 if not entry:continue
