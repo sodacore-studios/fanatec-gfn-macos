@@ -17,6 +17,8 @@
 #include "g29_descriptor.h"
 #include "report_map.h"
 #include "ffb_wire.h"
+#include "fanatec_device.h"
+#include "fanatec_known_descriptor.h"
 #ifndef BRIDGE_LOG
 #include "runtime_paths.h"
 static char runtime_log[PATH_MAX];
@@ -57,8 +59,7 @@ static int number(CFTypeRef v) {
 }
 // Calls originating inside this interposer resolve to the original IOKit APIs.
 static int is_wheel(IOHIDDeviceRef d) {
-    return d && number(IOHIDDeviceGetProperty(d,CFSTR("VendorID")))==0xeb7 &&
-        number(IOHIDDeviceGetProperty(d,CFSTR("ProductID")))==0x20;
+    return ftec_device_profile(d)!=NULL;
 }
 static CFTypeRef property(IOHIDDeviceRef d,CFStringRef key) {
     if(!is_wheel(d)) return IOHIDDeviceGetProperty(d,key);
@@ -77,25 +78,27 @@ static CFTypeRef property(IOHIDDeviceRef d,CFStringRef key) {
     if(CFEqual(key,CFSTR("DeviceUsagePairs"))) return usages;
     return IOHIDDeviceGetProperty(d,key);
 }
-static CFDictionaryRef rewrite_match(CFDictionaryRef dict) {
-    if(!dict) return NULL;
+static void append_matches(CFMutableArrayRef out,CFDictionaryRef dict){
     int v=number(CFDictionaryGetValue(dict,CFSTR("VendorID")));
     int p=number(CFDictionaryGetValue(dict,CFSTR("ProductID")));
-    if(v!=0x46d || (uint16_t)p!=0xc24f) return CFRetain(dict);
-    CFMutableDictionaryRef copy=CFDictionaryCreateMutableCopy(NULL,0,dict);
-    CFNumberRef a=num(0xeb7),b=num(0x20);
-    CFDictionarySetValue(copy,CFSTR("VendorID"),a);CFDictionarySetValue(copy,CFSTR("ProductID"),b);
-    CFRelease(a);CFRelease(b);log_line("match G29 -> CSL DD");return copy;
-}
-static void matching(IOHIDManagerRef m,CFDictionaryRef d) {
-    CFDictionaryRef r=rewrite_match(d);IOHIDManagerSetDeviceMatching(m,r);if(r) CFRelease(r);
-}
-static void matching_multiple(IOHIDManagerRef m,CFArrayRef a) {
-    if(!a){IOHIDManagerSetDeviceMatchingMultiple(m,a);return;}
-    CFMutableArrayRef r=CFArrayCreateMutable(NULL,0,&kCFTypeArrayCallBacks);
-    for(CFIndex i=0;i<CFArrayGetCount(a);i++) {
-        CFDictionaryRef d=rewrite_match(CFArrayGetValueAtIndex(a,i));CFArrayAppendValue(r,d);CFRelease(d);
+    if(v!=0x46d || (uint16_t)p!=0xc24f){CFArrayAppendValue(out,dict);return;}
+    for(size_t i=0;i<FTEC_PROFILE_COUNT;i++){
+        CFMutableDictionaryRef copy=CFDictionaryCreateMutableCopy(NULL,0,dict);
+        CFNumberRef a=num(0xeb7),b=num(ftec_profiles[i].pid);
+        CFDictionarySetValue(copy,CFSTR("VendorID"),a);CFDictionarySetValue(copy,CFSTR("ProductID"),b);
+        CFArrayAppendValue(out,copy);CFRelease(copy);CFRelease(a);CFRelease(b);
     }
+    log_line("match G29 -> %zu Fanatec PC-mode profiles",FTEC_PROFILE_COUNT);
+}
+static void matching(IOHIDManagerRef m,CFDictionaryRef d){
+    if(!d){IOHIDManagerSetDeviceMatching(m,NULL);return;}
+    CFMutableArrayRef a=CFArrayCreateMutable(NULL,0,&kCFTypeArrayCallBacks);
+    append_matches(a,d);IOHIDManagerSetDeviceMatchingMultiple(m,a);CFRelease(a);
+}
+static void matching_multiple(IOHIDManagerRef m,CFArrayRef a){
+    if(!a){IOHIDManagerSetDeviceMatchingMultiple(m,NULL);return;}
+    CFMutableArrayRef r=CFArrayCreateMutable(NULL,0,&kCFTypeArrayCallBacks);
+    for(CFIndex i=0;i<CFArrayGetCount(a);i++)append_matches(r,CFArrayGetValueAtIndex(a,i));
     IOHIDManagerSetDeviceMatchingMultiple(m,r);CFRelease(r);
 }
 typedef struct Slot {
@@ -106,7 +109,8 @@ typedef struct Slot {
     CFIndex caller_capacity;
     uint8_t raw[512];
     uint8_t latest[12];
-    int have_latest;
+    int have_latest,known_layout;
+    FtecElements elements;
     struct Slot *next;
 } Slot;
 // Slots survive process lifetime: avoids a late asynchronous callback using freed state.
@@ -114,14 +118,22 @@ static Slot *slots;
 static Slot *slot_for(IOHIDDeviceRef d) {
     for(Slot *s=slots;s;s=s->next) if(s->device==d) return s;
     Slot *s=calloc(1,sizeof(*s));if(!s) return NULL;
-    s->device=(IOHIDDeviceRef)CFRetain(d);s->next=slots;slots=s;return s;
+    s->device=(IOHIDDeviceRef)CFRetain(d);s->elements=ftec_elements(d);
+    CFTypeRef desc=IOHIDDeviceGetProperty(d,CFSTR("ReportDescriptor"));
+    s->known_layout=desc && CFGetTypeID(desc)==CFDataGetTypeID() &&
+        CFDataGetLength(desc)==sizeof(ftec_known_descriptor) &&
+        !memcmp(CFDataGetBytePtr(desc),ftec_known_descriptor,sizeof(ftec_known_descriptor));
+    log_line("profile=%s input=%s",ftec_device_profile(d)->name,
+        s->known_layout?"captured CSL DD layout":s->elements.valid?"experimental HID elements":"unsupported layout; input rejected");
+    s->next=slots;slots=s;return s;
 }
 static void report_callback(void *ctx,IOReturn result,void *sender,IOHIDReportType type,
                             uint32_t report_id,uint8_t *data,CFIndex length) {
     (void)sender;(void)report_id;
     Slot *s=ctx;uint8_t mapped[12];
     if(result!=kIOReturnSuccess || type!=kIOHIDReportTypeInput || length<0 ||
-       !map_report(data,(size_t)length,mapped,0)){atomic_fetch_add(&ignored,1);return;}
+       (s->known_layout?!map_report(data,(size_t)length,mapped,0):
+        (report_id>1 || !ftec_map_elements(s->device,&s->elements,mapped)))){atomic_fetch_add(&ignored,1);return;}
     pthread_mutex_lock(&lock);
     memcpy(s->latest,mapped,12);s->have_latest=1;
     IOHIDReportCallback cb=s->callback;void *c=s->context;

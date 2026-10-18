@@ -35,3 +35,14 @@ Packets must have exact size, expected magic/type/report ID, zero reserved field
 The native installer changes a copy of a proprietary client and relaxes library validation only for that copy. It neither installs a kernel/system extension nor patches the original app. There is no network service in the bridge and no global `DYLD_INSERT_LIBRARIES` configuration. A local same-user process can still send socket packets: the socket is not an authentication boundary against a compromised account.
 
 Client updates can break assumptions. Version/checksum gates are intentional, but they do not constitute a full audit of NVIDIA or its update system. Runtime bridge detection checks for the injected load path; it is not a complete integrity verification. The controller and receiver are not a hardware-certified safety system.
+
+## Additional device profiles
+
+`device_profiles.h` contains the seven PID profiles and force-resolution policy.
+`fanatec_device.h` selects primary wheel interfaces and reads normalized HID elements
+for layouts other than the captured CSL DD descriptor. The original byte mapping
+is used only after an exact descriptor match (`fanatec_known_descriptor.h`).
+The receiver refuses multiple bases, unknown profiles and unverified output framing.
+Legacy profiles encode signed neutral as 8-bit 0x80; high-resolution profiles use
+16-bit 0x8000. Output report ID 0 omits the report-ID prefix on USB.
+The GUI exports a read-only diagnostic snapshot without sending motor commands.

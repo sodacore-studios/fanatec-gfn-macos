@@ -51,3 +51,13 @@ With the revised receiver, two opposite 0.2-second impulses at 3% completed
 without reported USB write errors. The user confirmed that no sustained force
 remained and the wheel could be moved in both directions. Repeating the original
 ACC game-exit scenario is still pending; the impulse result does not prove it.
+
+## Experimental multi-base validation
+
+The additional model profiles have no physical results in this project. Tests cover
+all 256 input force levels for each profile, 8-/16-bit neutral and stop packets,
+numbered/unnumbered USB framing, normalized HID axes/buttons and rejection of
+ambiguous/missing/relative axes or failed value reads. Synthetic HID fixtures are
+not captures from the named bases. The read-only CSL DD diagnostic successfully
+identified the primary input layout and output report 1 (seven-byte payload).
+See [Community testing](community-testing.md) for model status and acceptance steps.

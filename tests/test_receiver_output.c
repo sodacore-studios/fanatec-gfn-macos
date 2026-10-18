@@ -8,8 +8,9 @@
 static uint8_t writes[16][8];
 static unsigned write_count;
 IOReturn capture_test_report(IOHIDDeviceRef device,IOHIDReportType type,CFIndex id,const uint8_t *data,CFIndex length){
-    assert(device==wheel && type==kIOHIDReportTypeOutput && id==1 && length==8);
-    assert(write_count<16);memcpy(writes[write_count++],data,8);
+    assert(device==wheel && type==kIOHIDReportTypeOutput && id==output_id && length==(output_id?8:7));
+    assert(write_count<16);memset(writes[write_count],0,8);
+    memcpy(writes[write_count++]+(output_id==0),data,(size_t)length);
     return kIOReturnSuccess;
 }
 int main(void){
@@ -36,6 +37,13 @@ int main(void){
     uint8_t active_force[8];assert(ftec_constant(.5,1,active_force));
     write_count=0;output_force(active_force);
     assert(write_count==1 && !memcmp(writes[0],active_force,8));
+    // Legacy base uses 8-bit force and may have an unnumbered output report.
+    highres=0;output_id=1;write_count=0;stop_motor();
+    const uint8_t legacy_neutral[8]={1,1,8,128,0,0,0,0};
+    assert(write_count==3 && !memcmp(writes[0],legacy_neutral,8));
+    output_id=0;write_count=0;stop_motor();
+    const uint8_t unnumbered_neutral[8]={0,1,8,128,0,0,0,0};
+    assert(write_count==3 && !memcmp(writes[0],unnumbered_neutral,8));
     wheel=NULL;
     puts("PASS: both force directions are neutralized, slot 0 disabled, then globally stopped");
 }

@@ -14,11 +14,12 @@ final class Controller: NSObject, NSApplicationDelegate {
     var buffer = ""
     let state = NSTextField(wrappingLabelWithString: "Ready. Force feedback is off.")
     let gain = NSPopUpButton(frame: .zero, pullsDown: false)
+    let experimental = NSButton(checkboxWithTitle: "Enable experimental bases (community testing)", target: nil, action: nil)
     let duration = NSPopUpButton(frame: .zero, pullsDown: false)
     let start = NSButton(title: "Start force feedback", target: nil, action: nil)
     let stop = NSButton(title: "STOP", target: nil, action: nil)
     func applicationDidFinishLaunching(_ notification: Notification) {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 520), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "Fanatec Force Feedback"
         window.center()
         let stack = NSStackView()
@@ -26,20 +27,23 @@ final class Controller: NSObject, NSApplicationDelegate {
         stack.translatesAutoresizingMaskIntoConstraints = false
         window.contentView!.addSubview(stack)
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 24), stack.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -24), stack.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 24)])
-        let title = NSTextField(labelWithString: "CSL DD · GeForce NOW")
+        let title = NSTextField(labelWithString: "Fanatec · GeForce NOW")
         title.font = .boldSystemFont(ofSize: 22)
         stack.addArrangedSubview(title)
-        let help = NSTextField(wrappingLabelWithString: "Use red PC mode. Run ACC in the managed GFN app. At 100%, adjust force strength in the game.")
+        let help = NSTextField(wrappingLabelWithString: "Use native PC mode and connect one base. CSL DD has physical test results; other profiles are experimental. Start community tests at 3%.")
         help.preferredMaxLayoutWidth = 550
         stack.addArrangedSubview(help)
         installButton.target = self; installButton.action = #selector(installBridge)
-        stack.addArrangedSubview(installButton)
+        let diagnose = NSButton(title: "Export device diagnostics…", target: self, action: #selector(exportDiagnostics))
+        stack.addArrangedSubview(NSStackView(views: [installButton, diagnose]))
         do { try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true) }
         catch { state.stringValue = "Cannot create runtime directory: \(error.localizedDescription)" }
-        gain.addItems(withTitles: ["10 %", "25 %", "50 %", "75 %", "100 %"]); gain.selectItem(at: 4)
-        duration.addItems(withTitles: ["Unlimited", "5 minutes", "15 minutes", "30 minutes", "60 minutes"]); duration.selectItem(at: 0)
+        gain.addItems(withTitles: ["3 %", "10 %", "25 %", "50 %", "75 %", "100 %"]); gain.selectItem(at: 5)
+        duration.addItems(withTitles: ["Unlimited", "30 seconds", "5 minutes", "15 minutes", "30 minutes", "60 minutes"]); duration.selectItem(at: 0)
         let settings = NSStackView(views: [NSTextField(labelWithString: "Passthrough:"), gain, NSTextField(labelWithString: "Duration:"), duration])
         settings.spacing = 10; stack.addArrangedSubview(settings)
+        experimental.target = self; experimental.action = #selector(experimentalChanged)
+        stack.addArrangedSubview(experimental)
         openButton.target = self; openButton.action = #selector(openGame)
         start.target = self; start.action = #selector(begin)
         stop.target = self; stop.action = #selector(end); stop.isEnabled = false
@@ -55,6 +59,35 @@ final class Controller: NSObject, NSApplicationDelegate {
         case .ready: break
         }
         window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+    }
+    @objc func experimentalChanged() {
+        if experimental.state == .on { gain.selectItem(at: 0); duration.selectItem(at: 1) }
+    }
+    @objc func exportDiagnostics() {
+        guard process == nil, !installing else { state.stringValue = "Stop force feedback before exporting diagnostics."; return }
+        let panel = NSSavePanel(); panel.nameFieldStringValue = "Fanatec-device-diagnostics.txt"
+        panel.allowedContentTypes = [.plainText]
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        installing = true; start.isEnabled = false; installButton.isEnabled = false; openButton.isEnabled = false
+        state.stringValue = "Reading device descriptors. No motor commands are sent…"
+        let helper = Bundle.main.resourceURL!.appendingPathComponent("FFBReceiver")
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result: String
+            do {
+                let task = Process(); task.executableURL = helper; task.arguments = ["--diagnose"]
+                let pipe = Pipe(); task.standardOutput = pipe; task.standardError = pipe
+                try task.run()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile(); task.waitUntilExit()
+                let text = "Fanatec GFN \(version)\n\(ProcessInfo.processInfo.operatingSystemVersionString)\nNo serial numbers or host paths collected. No automatic upload.\n" + String(decoding: data, as: UTF8.self)
+                try text.write(to: destination, atomically: true, encoding: .utf8)
+                result = task.terminationStatus == 0 ? "Diagnostics exported. Review the file before sharing it in a community report." : "Diagnostic error recorded in the exported file."
+            } catch { result = "Could not export diagnostics: \(error.localizedDescription)" }
+            DispatchQueue.main.async {
+                self.installing = false; self.installButton.isEnabled = true; self.openButton.isEnabled = true
+                self.start.isEnabled = Installer.managedAppState() == .ready; self.state.stringValue = result
+            }
+        }
     }
     @objc func installBridge() { prepareGame(openAfterInstall: false) }
     func prepareGame(openAfterInstall: Bool) {
@@ -113,10 +146,11 @@ final class Controller: NSObject, NSApplicationDelegate {
         guard Installer.managedAppState() == .ready else {
             state.stringValue = "Bridge missing. Use Install / repair to prepare a supported GFN copy."; return
         }
-        let value = [0.10, 0.25, 0.50, 0.75, 1.0][gain.indexOfSelectedItem]
-        let seconds = [0, 300, 900, 1800, 3600][duration.indexOfSelectedItem]
+        let value = [0.03, 0.10, 0.25, 0.50, 0.75, 1.0][gain.indexOfSelectedItem]
+        let seconds = [0, 30, 300, 900, 1800, 3600][duration.indexOfSelectedItem]
         let p = Process(); p.executableURL = helper
         p.arguments = ["--live", "--session", "--gain", String(value), "--seconds", String(seconds), "--parent-pid", String(ProcessInfo.processInfo.processIdentifier)]
+        if experimental.state == .on { p.arguments!.append("--allow-experimental") }
         let pipe = Pipe(); p.standardOutput = pipe; p.standardError = pipe
         let logURL = root.appendingPathComponent("session.log")
         guard FileManager.default.createFile(atPath: logURL.path, contents: nil), let file = try? FileHandle(forWritingTo: logURL) else {
@@ -143,7 +177,7 @@ final class Controller: NSObject, NSApplicationDelegate {
         p.terminationHandler = { ended in
             DispatchQueue.main.async {
                 self.process = nil; self.installButton.isEnabled = true; self.start.isEnabled = true; self.stop.isEnabled = false
-                self.gain.isEnabled = true; self.duration.isEnabled = true
+                self.gain.isEnabled = true; self.duration.isEnabled = true; self.experimental.isEnabled = true
                 self.state.stringValue = ended.terminationStatus == 0 ? "Stopped. Stop commands sent." : "Receiver exited (code \(ended.terminationStatus)). Details: session.log"
                 try? self.log?.close(); self.log = nil
                 if self.quitting { NSApp.reply(toApplicationShouldTerminate: true) }
@@ -151,7 +185,7 @@ final class Controller: NSObject, NSApplicationDelegate {
         }
         do {
             try p.run(); process = p
-            installButton.isEnabled = false; start.isEnabled = false; stop.isEnabled = true; gain.isEnabled = false; duration.isEnabled = false
+            installButton.isEnabled = false; start.isEnabled = false; stop.isEnabled = true; gain.isEnabled = false; duration.isEnabled = false; experimental.isEnabled = false
             state.stringValue = "Started · immediate \(Int(value*100)) % passthrough · waiting for game forces."
         } catch {
             pipe.fileHandleForReading.readabilityHandler = nil

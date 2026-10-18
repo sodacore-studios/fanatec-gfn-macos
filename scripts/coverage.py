@@ -9,11 +9,11 @@ OUT=ROOT/'coverage'
 OUT.mkdir(exist_ok=True)
 def run(*args,**kw):
     return subprocess.run([str(x) for x in args],check=True,**kw)
-names=['report_map','force_protocol','wire_protocol']
+names=['report_map','force_protocol','wire_protocol','device_profiles','hid_elements']
 objects=[]; profiles=[]
 for name in names:
     binary=OUT/name; profile=OUT/(name+'.profraw')
-    run('clang','-O0','-g','-fprofile-instr-generate','-fcoverage-mapping','-I',ROOT/'source',ROOT/'tests'/('test_'+name+'.c'),'-o',binary)
+    run('clang','-O0','-g','-fprofile-instr-generate','-fcoverage-mapping','-framework','CoreFoundation','-framework','IOKit','-I',ROOT/'source',ROOT/'tests'/('test_'+name+'.c'),'-o',binary)
     run(binary,env={**os.environ,'LLVM_PROFILE_FILE':str(profile)})
     objects.append(binary);profiles.append(profile)
 merged=OUT/'core.profdata'
@@ -22,9 +22,9 @@ args=['xcrun','llvm-cov','export',str(objects[0]),'-instr-profile='+str(merged)]
 for obj in objects[1:]:args+=['-object',str(obj)]
 result=run(*args,capture_output=True,text=True)
 data=json.loads(result.stdout)
-headers={'report_map.h','ffb_protocol.h','ffb_wire.h'}
+headers={'report_map.h','ffb_protocol.h','ffb_wire.h','device_profiles.h','fanatec_device.h'}
 files=[f for d in data['data'] for f in d['files'] if Path(f['filename']).name in headers]
-assert len(files)==3, 'Missing coverage for a core header'
+assert len(files)==len(headers), 'Missing coverage for a core header'
 summary={}
 for metric,minimum in [('lines',95),('branches',90)]:
     count=sum(f['summary'][metric]['count'] for f in files)

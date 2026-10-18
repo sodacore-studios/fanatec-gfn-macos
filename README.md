@@ -2,7 +2,7 @@
 
 # Fanatec GFN for macOS
 
-Use a **Fanatec CSL DD** with steering, pedals and constant-force feedback in the native **GeForce NOW** macOS client. The bridge presents the wheel as a Logitech G29 inside a locally prepared GFN copy.
+Use a **Fanatec CSL DD**, or a source-backed **experimental Fanatec profile**, with steering, pedals and constant-force feedback in the native **GeForce NOW** macOS client. The bridge presents the wheel as a Logitech G29 inside a locally prepared GFN copy.
 
 [Download the latest app](https://github.com/sodacore-studios/fanatec-gfn-macos/releases/latest) · [Installation](docs/installation.md) · [Operation](docs/operation.md) · [Compatibility and validation](docs/validation.md)
 
@@ -59,3 +59,16 @@ See [architecture](docs/architecture.md), [contributing](CONTRIBUTING.md), [rele
 ## License
 
 GPL-2.0-only. Protocol references and distribution boundaries are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The generated icon contains no vendor branding.
+
+## Experimental bases and community testing
+
+Profiles are included for Podium DD1/DD2, CSL Elite/Elite PS4 and ClubSport V2/V2.5.
+The shared 0020 family also covers GT DD Pro and ClubSport DD/DD+ candidates.
+**Only CSL DD has project hardware observations.** Other models need community
+validation; recognition is not a compatibility guarantee.
+
+Use **Export device diagnostics** with FFB off, then follow the
+[community testing guide](docs/community-testing.md). The experimental checkbox
+selects a 3% / 30-second first-test preset. Existing normal-session defaults remain
+100% / unlimited without a ramp. Upgrade the managed GFN bridge with Install / repair.
+Report results through the repository's Wheel base compatibility issue form.

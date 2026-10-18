@@ -20,8 +20,10 @@ class CoreTests(unittest.TestCase):
     def check_core(self,name):
         with tempfile.TemporaryDirectory(prefix='fgfn-') as directory:
             binary=Path(directory)/name
-            run('clang','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I',SOURCE,ROOT/'tests'/('test_'+name+'.c'),'-o',binary)
+            run('clang','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-framework','CoreFoundation','-framework','IOKit','-I',SOURCE,ROOT/'tests'/('test_'+name+'.c'),'-o',binary)
             run(binary)
+    def test_hid_elements(self):self.check_core('hid_elements')
+    def test_device_profiles(self):self.check_core('device_profiles')
     def test_report_mapping(self):self.check_core('report_map')
     def test_force_translation(self):self.check_core('force_protocol')
     def test_wire_validation(self):self.check_core('wire_protocol')
@@ -50,7 +52,7 @@ class RuntimeTests(unittest.TestCase):
             ROOT/'tests/test_receiver_output.c','-o',binary)
         run(binary)
     def test_invalid_arguments(self):
-        for args in (['--session','--seconds','abc'],['--session','--seconds','-1'],['--seconds','0'],['--session','--seconds','3601'],['--session','--gain','1.01'],['--session','--gain','0.1junk']):
+        for args in (['--session','--seconds','abc'],['--session','--seconds','-1'],['--seconds','0'],['--session','--seconds','3601'],['--session','--gain','1.01'],['--session','--gain','0.1junk'],['--diagnose','--live'],['--diagnose','--pulse-test']):
             with self.subTest(args=args):
                 result=subprocess.run([str(self.receiver),*args],capture_output=True,text=True)
                 self.assertEqual(result.returncode,2)

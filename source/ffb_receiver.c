@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include "ffb_protocol.h"
 #include "ffb_wire.h"
+#include "fanatec_device.h"
 #ifndef FFB_SOCKET
 #include "runtime_paths.h"
 static char runtime_socket[104];
@@ -25,10 +26,14 @@ static volatile sig_atomic_t quit_requested;
 static IOHIDManagerRef manager;
 static IOHIDDeviceRef wheel;
 static int failed;
+static int output_id=1,highres=1,allow_experimental;
 static void stop_signal(int n){(void)n;quit_requested=1;}
 static IOReturn write_motor(const uint8_t packet[8]){
     if(!wheel) return kIOReturnSuccess;
-    IOReturn r=IOHIDDeviceSetReport(wheel,kIOHIDReportTypeOutput,1,packet,8);
+    uint8_t encoded[8];memcpy(encoded,packet,8);ftec_encode_resolution(encoded,highres);
+    encoded[0]=(uint8_t)output_id;
+    IOReturn r=IOHIDDeviceSetReport(wheel,kIOHIDReportTypeOutput,output_id,
+                                  encoded+(output_id==0),output_id==0?7:8);
     if(r!=kIOReturnSuccess){fprintf(stderr,"motor write failed 0x%08x; stopping\n",r);failed=1;quit_requested=1;}
     return r;
 }
@@ -39,26 +44,66 @@ static void stop_motor(void){
 static void output_force(const uint8_t packet[8]){
     if(packet[1]==0x03)stop_motor();else write_motor(packet);
 }
-static int open_wheel(void){
-    int v=0xeb7,p=0x20;
-    CFNumberRef vid=CFNumberCreate(NULL,kCFNumberIntType,&v),pid=CFNumberCreate(NULL,kCFNumberIntType,&p);
-    const void *keys[]={CFSTR("VendorID"),CFSTR("ProductID")},*values[]={vid,pid};
-    CFDictionaryRef match=CFDictionaryCreate(NULL,keys,values,2,&kCFTypeDictionaryKeyCallBacks,&kCFTypeDictionaryValueCallBacks);
+static int open_wheel(int diagnose){
+    int v=0xeb7;CFNumberRef vid=CFNumberCreate(NULL,kCFNumberIntType,&v);
+    const void *key=CFSTR("VendorID"),*value=vid;
+    CFDictionaryRef match=CFDictionaryCreate(NULL,&key,&value,1,&kCFTypeDictionaryKeyCallBacks,&kCFTypeDictionaryValueCallBacks);
     manager=IOHIDManagerCreate(NULL,0);IOHIDManagerSetDeviceMatching(manager,match);
-    CFRelease(match);CFRelease(vid);CFRelease(pid);
-    IOReturn r=IOHIDManagerOpen(manager,0);
-    CFSetRef devices=IOHIDManagerCopyDevices(manager);
-    if(r || !devices || CFSetGetCount(devices)!=1){fprintf(stderr,"Need exactly one accessible CSL DD: 0x%08x\n",r);if(devices)CFRelease(devices);return 0;}
-    IOHIDDeviceRef d;CFSetGetValues(devices,(const void **)&d);wheel=(IOHIDDeviceRef)CFRetain(d);CFRelease(devices);
-    return 1;
+    CFRelease(match);CFRelease(vid);
+    IOReturn r=IOHIDManagerOpen(manager,0);CFSetRef devices=IOHIDManagerCopyDevices(manager);
+    unsigned count=0;IOHIDDeviceRef selected=NULL;
+    if(!r && devices){
+        CFIndex n=CFSetGetCount(devices);const void **items=calloc((size_t)n+1,sizeof(void *));
+        if(!items){CFRelease(devices);return 0;}CFSetGetValues(devices,items);
+        for(CFIndex i=0;i<n;i++){
+            IOHIDDeviceRef d=(IOHIDDeviceRef)items[i];const FtecProfile *p=ftec_device_profile(d);
+            if(p){count++;selected=d;}
+            if(diagnose){
+                FtecElements e=ftec_elements(d);
+                printf("USB %04x:%04x profile=%s input_layout=%s output_report=%d force_bits=%d\n",
+                    0xeb7,ftec_number(IOHIDDeviceGetProperty(d,CFSTR("ProductID"))),p?p->name:"unsupported interface",
+                    e.valid?"X/Z/Rz available":"unverified or ambiguous",e.output_id,p?(p->highres?16:8):0);
+                if(e.elements)for(CFIndex k=0;k<CFArrayGetCount(e.elements);k++){
+                    IOHIDElementRef item=(IOHIDElementRef)CFArrayGetValueAtIndex(e.elements,k);
+                    if(IOHIDElementGetType(item)==kIOHIDElementTypeOutput)
+                        printf("output report=%u page=%04x usage=%04x bits=%u count=%u\n",IOHIDElementGetReportID(item),IOHIDElementGetUsagePage(item),IOHIDElementGetUsage(item),IOHIDElementGetReportSize(item),IOHIDElementGetReportCount(item));
+                }
+                CFTypeRef desc=IOHIDDeviceGetProperty(d,CFSTR("ReportDescriptor"));
+                if(desc && CFGetTypeID(desc)==CFDataGetTypeID() && CFDataGetLength(desc)<=4096){
+                    printf("descriptor_hex=");for(CFIndex j=0;j<CFDataGetLength(desc);j++)printf("%02x",CFDataGetBytePtr(desc)[j]);puts("");
+                }
+                uint8_t mapped[12];
+                if(ftec_map_elements(d,&e,mapped))printf("snapshot steering=%u gas=%u brake=%u clutch=%u\n",mapped[4]+256u*mapped[5],mapped[6],mapped[7],mapped[8]);
+                if(e.elements)CFRelease(e.elements);
+            }
+        }
+        free(items);
+        if(!diagnose && count==1){
+            FtecElements e=ftec_elements(selected);const FtecProfile *p=ftec_device_profile(selected);
+            if(p->pid!=0x0020 && !allow_experimental){
+                fprintf(stderr,"Experimental base: explicitly enable community testing with --allow-experimental; begin at 3%%.\n");
+            }else if(e.valid && e.output_id>=0){
+                output_id=e.output_id;highres=p->highres;wheel=(IOHIDDeviceRef)CFRetain(selected);
+                printf("device=%s USB=0eb7:%04x force_bits=%d output_report=%d\n",p->name,p->pid,highres?16:8,output_id);
+            }
+            if(e.elements)CFRelease(e.elements);
+        }
+    }
+    if(devices)CFRelease(devices);
+    if(diagnose){printf("diagnostic only: no motor writes; candidate bases=%u\n",count);}
+    if(diagnose || !wheel){IOHIDManagerClose(manager,0);CFRelease(manager);manager=NULL;}
+    if(!diagnose && !wheel)fprintf(stderr,"Need exactly one known Fanatec base with unambiguous X/Z/Rz inputs and a seven-byte output report (found %u, status 0x%08x). Run --diagnose.\n",count,r);
+    return diagnose?r==0:wheel!=NULL;
 }
 int main(int argc,char **argv){
 #ifdef DEFAULT_RUNTIME_SOCKET
     if(!runtime_path(runtime_socket,sizeof(runtime_socket),"ffb.sock")){fprintf(stderr,"Cannot resolve runtime socket path\n");return 3;}
 #endif
-    int live=0,pulse=0,invert=0,ramp50=0,session=0,parent_pid=0,seconds=30;double gain=0.03;
+    int diagnose=0,live=0,pulse=0,invert=0,ramp50=0,session=0,parent_pid=0,seconds=30;double gain=0.03;
     for(int i=1;i<argc;i++){
-        if(!strcmp(argv[i],"--live"))live=1;
+        if(!strcmp(argv[i],"--diagnose"))diagnose=1;
+        else if(!strcmp(argv[i],"--allow-experimental"))allow_experimental=1;
+        else if(!strcmp(argv[i],"--live"))live=1;
         else if(!strcmp(argv[i],"--ramp-50"))ramp50=1;
         else if(!strcmp(argv[i],"--session"))session=1;
         else if(!strcmp(argv[i],"--parent-pid")&&i+1<argc){
@@ -76,7 +121,7 @@ int main(int argc,char **argv){
             char *end; const char *arg=argv[++i]; gain=strtod(arg,&end);
             if(!*arg||*end){fprintf(stderr,"Invalid gain\n");return 2;}
         }
-        else {fprintf(stderr,"Usage: %s [--live | --pulse-test] [--gain 0.03] [--seconds 30] [--invert] | --ramp-50 [--live] [--invert]\n",argv[0]);return 2;}
+        else {fprintf(stderr,"Usage: %s [--diagnose] | [--allow-experimental] [--live | --pulse-test] [--gain 0.03] [--seconds 30] [--invert] | --ramp-50 [--live] [--invert]\n",argv[0]);return 2;}
     }
     if(!isfinite(gain)||gain<=0||gain>(session?1.0:0.10)||seconds<(session?0:1)||seconds>(session?3600:120)){
         fprintf(stderr,"Test: gain (0,0.10], duration 1..120s; --session: gain (0,1.0], duration 0..3600s (0=unlimited)\n");return 2;
@@ -88,6 +133,10 @@ int main(int argc,char **argv){
     }
     // A receiver must never inherit the bridge: it would turn physical writes back into captures.
     if(getenv("DYLD_INSERT_LIBRARIES")){fprintf(stderr,"Refusing injected environment\n");return 2;}
+    if(diagnose){
+        if(argc!=2){fprintf(stderr,"--diagnose must be used alone; it never writes to the motor\n");return 2;}
+        return open_wheel(1)?0:4;
+    }
     setbuf(stdout,NULL);signal(SIGINT,stop_signal);signal(SIGTERM,stop_signal);signal(SIGHUP,stop_signal);
     int fd=-1;
     if(!pulse){
@@ -100,7 +149,7 @@ int main(int argc,char **argv){
         if(r){perror("bind");close(fd);return 3;}
         fcntl(fd,F_SETFL,O_NONBLOCK);
     }
-    if(live && !open_wheel()){if(fd>=0){close(fd);unlink(FFB_SOCKET);}return 4;}
+    if(live && !open_wheel(0)){if(fd>=0){close(fd);unlink(FFB_SOCKET);}return 4;}
     printf("mode=%s gain=%.3f duration=%ds watchdog=250ms CONSTANT_FORCE_ONLY\n",live?"LIVE":"DRY_RUN",gain,seconds);
     if(ramp50)puts("ramp: 0..5s=10%, 5..15s=10->50%, 15..30s=50%, then stop");
     if(session)printf("session: immediate %.0f%% passthrough, duration=%s\n",gain*100,seconds?"bounded":"unlimited until stop");

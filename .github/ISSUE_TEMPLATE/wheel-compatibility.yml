@@ -1,0 +1,38 @@
+name: Wheel base compatibility report
+description: Report experimental input and force-feedback results for a specific Fanatec setup.
+title: "[Compatibility] Model / firmware / game"
+body:
+  - type: markdown
+    attributes:
+      value: "Follow docs/community-testing.md. Input recognition alone does not establish FFB compatibility. Do not upload serial numbers, account details or NVIDIA logs."
+  - type: textarea
+    id: setup
+    attributes:
+      label: Hardware and software
+      description: Base model/firmware, rim, pedals and connection, Mac/chip/macOS, bridge release, GFN version and game.
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Input checks with FFB off
+      description: Steering center/limits, separate accelerator/brake/clutch, pedal polarity, hat and buttons. State pass/fail/not tested for each.
+    validations:
+      required: true
+  - type: textarea
+    id: forces
+    attributes:
+      label: Force and shutdown checks
+      description: Gain/duration used; direction, STOP, timer expiry, pause, menus and game exit. State pass/fail/not tested separately. Was power-off necessary?
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Device diagnostics
+      description: Attach the reviewed Export device diagnostics text file. It contains no serial numbers or host paths and performs no motor writes.
+  - type: textarea
+    id: details
+    attributes:
+      label: Additional observations
+      description: Reproduction steps, errors and firmware-dependent differences.

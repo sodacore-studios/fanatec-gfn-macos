@@ -6,7 +6,7 @@
 |---|---|
 | Install / repair | Validate and create a separate GFN copy; disabled while force feedback is active |
 | Open GeForce NOW | Open the managed copy, or guide setup/repair if it is missing or incomplete |
-| Passthrough | 10, 25, 50, 75 or 100 percent; default 100 |
+| Passthrough | 3, 10, 25, 50, 75 or 100 percent; default 100 |
 | Duration | Unlimited (default), 5, 15, 30 or 60 minutes |
 | Start force feedback | Start the physical USB receiver explicitly |
 | STOP | Request receiver termination and stop commands |
@@ -46,3 +46,5 @@ Do not run multiple controllers or managed GFN instances against the same wheel.
 ## Testing another game
 
 G29 support is a useful prerequisite, not a compatibility guarantee. Check axes, pedals, buttons and force direction at low strength, then sustained output. Record the game, client version, hardware and observed effects. Only ACC currently has a confirmed physical driving result; the bridge implements constant force and selected stop commands, not every Logitech effect.
+
+Experimental profiles, diagnostics and the 3% / 30-second community preset are described in [Community testing](community-testing.md).
