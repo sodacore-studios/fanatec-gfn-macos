@@ -9,6 +9,7 @@ final class Controller: NSObject, NSApplicationDelegate {
     var quitting = false
     var installing = false
     let installButton = NSButton(title: "Install / repair GFN bridge…", target: nil, action: nil)
+    let openButton = NSButton(title: "Open GeForce NOW", target: nil, action: nil)
     var log: FileHandle?
     var buffer = ""
     let state = NSTextField(wrappingLabelWithString: "Ready. Force feedback is off.")
@@ -39,18 +40,24 @@ final class Controller: NSObject, NSApplicationDelegate {
         duration.addItems(withTitles: ["Unlimited", "5 minutes", "15 minutes", "30 minutes", "60 minutes"]); duration.selectItem(at: 0)
         let settings = NSStackView(views: [NSTextField(labelWithString: "Passthrough:"), gain, NSTextField(labelWithString: "Duration:"), duration])
         settings.spacing = 10; stack.addArrangedSubview(settings)
-        let open = NSButton(title: "Open GeForce NOW", target: self, action: #selector(openGame))
+        openButton.target = self; openButton.action = #selector(openGame)
         start.target = self; start.action = #selector(begin)
         stop.target = self; stop.action = #selector(end); stop.isEnabled = false
-        let buttons = NSStackView(views: [open, start, stop]); buttons.spacing = 8
+        let buttons = NSStackView(views: [openButton, start, stop]); buttons.spacing = 8
         stack.addArrangedSubview(buttons)
         state.preferredMaxLayoutWidth = 550; stack.addArrangedSubview(state)
         let hint = NSTextField(wrappingLabelWithString: "Game forces are forwarded immediately. Unlimited runs until stopped or closed. The data-loss watchdog remains active. Power off the base if behavior is unexpected.")
         hint.preferredMaxLayoutWidth = 550; hint.font = .systemFont(ofSize: 11); hint.textColor = .secondaryLabelColor
         stack.addArrangedSubview(hint)
+        switch Installer.managedAppState() {
+        case .missing: state.stringValue = "Setup required. Click Open GeForce NOW to prepare your local copy."; start.isEnabled = false
+        case .needsRepair: state.stringValue = "GFN copy needs repair. Click Open GeForce NOW to repair it."; start.isEnabled = false
+        case .ready: break
+        }
         window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
     }
-    @objc func installBridge() {
+    @objc func installBridge() { prepareGame(openAfterInstall: false) }
+    func prepareGame(openAfterInstall: Bool) {
         guard process == nil, !installing else { return }
         let panel = NSOpenPanel(); panel.title = "Select the original GeForceNOW.app"
         panel.canChooseDirectories = false; panel.canChooseFiles = true
@@ -60,32 +67,50 @@ final class Controller: NSObject, NSApplicationDelegate {
         confirm.informativeText = "The original app is unchanged. A separate copy in your Applications folder will load this bridge and be locally signed. No global security settings are changed. An existing managed copy is preserved as a backup."
         confirm.addButton(withTitle:"Install"); confirm.addButton(withTitle:"Cancel")
         guard confirm.runModal() == .alertFirstButtonReturn else { return }
-        installing = true; installButton.isEnabled = false; start.isEnabled = false
+        installing = true; installButton.isEnabled = false; openButton.isEnabled = false; start.isEnabled = false
         state.stringValue = "Validating, copying and signing GFN…"
         DispatchQueue.global(qos:.userInitiated).async {
             let result: String
+            var succeeded = false
             do {
                 try Installer.install(source:source,resources:Bundle.main.resourceURL!)
+                succeeded = true
                 result = "Installed. Open GeForce NOW, start the game, then enable force feedback."
             } catch { result = "Installation failed: \(error.localizedDescription)" }
             DispatchQueue.main.async {
-                self.installing = false; self.installButton.isEnabled = true
-                self.start.isEnabled = true; self.state.stringValue = result
+                self.installing = false; self.installButton.isEnabled = true; self.openButton.isEnabled = true
+                self.start.isEnabled = Installer.managedAppState() == .ready; self.state.stringValue = result
+                if succeeded && openAfterInstall { self.openGame() }
             }
         }
     }
     @objc func openGame() {
+        guard !installing else { return }
+        let readiness = Installer.managedAppState()
+        guard readiness == .ready else {
+            guard process == nil else { state.stringValue = "Stop force feedback before repairing GFN."; return }
+            start.isEnabled = false
+            let alert = NSAlert()
+            alert.messageText = readiness == .missing ? "Set up GeForce NOW first" : "Repair the GFN copy"
+            alert.informativeText = "Select your original NVIDIA GeForceNOW.app to prepare a separate local copy. GeForce NOW will open after setup. Force feedback stays off until you start it."
+            alert.addButton(withTitle: "Set up…"); alert.addButton(withTitle: "Cancel")
+            state.stringValue = "Setup required. Use Open GeForce NOW or Install / repair to continue."
+            if alert.runModal() == .alertFirstButtonReturn { prepareGame(openAfterInstall: true) }
+            return
+        }
         let url = Installer.destination
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-            if let error = error { DispatchQueue.main.async { self.state.stringValue = "Could not open GFN: \(error.localizedDescription)" } }
+            DispatchQueue.main.async {
+                if let error = error { self.state.stringValue = "Could not open GFN: \(error.localizedDescription)" }
+                else if self.process == nil { self.state.stringValue = "GeForce NOW opened. Start your game, then enable force feedback." }
+            }
         }
     }
     @objc func begin() {
         guard process == nil, !installing else { return }
         let helper = Bundle.main.resourceURL!.appendingPathComponent("FFBReceiver")
-        let binary = Installer.destination.appendingPathComponent("Contents/MacOS/GeForceNOW")
         // A vendor update may replace the executable and remove the bridge.
-        guard let data = try? Data(contentsOf: binary), data.range(of: Data("@executable_path/../Frameworks/FanatecBridge.dylib".utf8)) != nil else {
+        guard Installer.managedAppState() == .ready else {
             state.stringValue = "Bridge missing. Use Install / repair to prepare a supported GFN copy."; return
         }
         let value = [0.10, 0.25, 0.50, 0.75, 1.0][gain.indexOfSelectedItem]
