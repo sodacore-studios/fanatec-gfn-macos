@@ -46,3 +46,7 @@ The receiver refuses multiple bases, unknown profiles and unverified output fram
 Legacy profiles encode signed neutral as 8-bit 0x80; high-resolution profiles use
 16-bit 0x8000. Output report ID 0 omits the report-ID prefix on USB.
 The GUI exports a read-only diagnostic snapshot without sending motor commands.
+
+Wire format 2 includes USB product/location identity. The live receiver accepts only
+its selected base, including after hot-plug. Older managed bridge copies must be
+repaired after upgrade; their wire format is intentionally rejected.

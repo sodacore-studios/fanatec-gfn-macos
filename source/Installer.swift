@@ -85,13 +85,16 @@ struct Installer {
     ]
     static let runtime = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/FanatecGFN")
     static let destination = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/Fanatec GFN/GeForceNOW Fanatec.app")
+    static let bridgeProtocolMarker = Data("version=0.3 wire=2".utf8)
     enum ManagedAppState { case missing, needsRepair, ready }
     static func managedAppState(at app: URL = destination) -> ManagedAppState {
         let fm = FileManager.default
         guard fm.fileExists(atPath: app.path) else { return .missing }
         let executable = app.appendingPathComponent("Contents/MacOS/GeForceNOW")
         let bridge = app.appendingPathComponent("Contents/Frameworks/FanatecBridge.dylib")
-        guard fm.isExecutableFile(atPath: executable.path), fm.fileExists(atPath: bridge.path),
+        guard fm.isExecutableFile(atPath: executable.path),
+              let bridgeData = try? Data(contentsOf: bridge),
+              bridgeData.range(of: bridgeProtocolMarker) != nil,
               let infoData = try? Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
               let info = (try? PropertyListSerialization.propertyList(from: infoData, format: nil)) as? [String: Any],
               info["CFBundleExecutable"] as? String == "GeForceNOW",

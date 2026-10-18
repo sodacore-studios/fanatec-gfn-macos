@@ -29,6 +29,8 @@ unknown PIDs are not included in this release.
   pedal polarity follows the existing Fanatec convention (released=maximum).
 - Missing, relative or duplicate required axes are rejected. This mapping is an
   experimental assumption until community tests confirm each layout and polarity.
+- Force packets are bound to the selected USB product and location, so a newly
+  attached second base cannot send its forces to the first.
 - Exactly one known primary wheel interface must be present for physical output.
   A seven-byte vendor output field with report ID 1 or unnumbered ID 0 is required.
 - Constant forces use the selected profile's 8- or 16-bit encoding. Neutral and
@@ -43,6 +45,7 @@ unknown PIDs are not included in this release.
 
 1. Install the appropriate release for your Mac. Run **Install / repair GFN bridge**
    again after upgrading: the managed GFN copy contains its own bridge binary.
+   The controller detects the older protocol and requests repair before enabling FFB.
    Close that GFN copy first; the installer refuses to modify a running copy.
 2. Connect one securely mounted base in native PC mode. Leave FFB off.
 3. Click **Export device diagnostics**. This reads descriptors and a current input

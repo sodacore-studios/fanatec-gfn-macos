@@ -170,7 +170,9 @@ static IOReturn capture_output(IOHIDDeviceRef d,IOHIDReportType t,CFIndex id,con
     // Local optional receiver defaults to dry-run. This process never writes the motor.
     if(force_socket>=0 && t==kIOHIDReportTypeOutput && id==0 && n==16 && b) {
         ForcePacket packet={.magic=FFB_MAGIC,.pid=(uint32_t)getpid(),.time_ns=monotonic_ns(),
-            .type=(uint32_t)t,.report_id=(uint32_t)id,.length=16};
+            .type=(uint32_t)t,.report_id=(uint32_t)id,.length=16,
+            .product_id=(uint32_t)number(IOHIDDeviceGetProperty(d,CFSTR("ProductID"))),
+            .location_id=(uint32_t)number(IOHIDDeviceGetProperty(d,CFSTR("LocationID")))};
         memcpy(packet.bytes,b,16);
         if(sendto(force_socket,&packet,sizeof(packet),0,(struct sockaddr *)&force_address,sizeof(force_address))==sizeof(packet)) {
             if(atomic_fetch_add(&force_forwarded,1)==0)log_line("local FFB receiver connected; app remains capture-only");
@@ -217,7 +219,7 @@ __attribute__((constructor)) static void setup(void) {
         force_socket=socket(AF_UNIX,SOCK_DGRAM,0);
         if(force_socket>=0){fcntl(force_socket,F_SETFL,O_NONBLOCK);fcntl(force_socket,F_SETFD,FD_CLOEXEC);}
     }
-    log_line("bridge loaded OUTPUT_CAPTURE_ONLY version=0.2 optional local force receiver");
+    log_line("bridge loaded OUTPUT_CAPTURE_ONLY version=0.3 wire=2 multi-base local force receiver");
 }
 void probe_print_hooks(void) {
     printf("bridge input=%u output_captured=%u ignored=%u; physical outputs disabled\n",

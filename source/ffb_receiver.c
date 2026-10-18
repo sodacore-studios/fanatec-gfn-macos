@@ -27,6 +27,7 @@ static IOHIDManagerRef manager;
 static IOHIDDeviceRef wheel;
 static int failed;
 static int output_id=1,highres=1,allow_experimental;
+static uint32_t output_product,output_location;
 static void stop_signal(int n){(void)n;quit_requested=1;}
 static IOReturn write_motor(const uint8_t packet[8]){
     if(!wheel) return kIOReturnSuccess;
@@ -63,6 +64,8 @@ static int open_wheel(int diagnose){
                 printf("USB %04x:%04x profile=%s input_layout=%s output_report=%d force_bits=%d\n",
                     0xeb7,ftec_number(IOHIDDeviceGetProperty(d,CFSTR("ProductID"))),p?p->name:"unsupported interface",
                     e.valid?"X/Z/Rz available":"unverified or ambiguous",e.output_id,p?(p->highres?16:8):0);
+                int location=ftec_number(IOHIDDeviceGetProperty(d,CFSTR("LocationID")));
+                printf("USB routing identity=%s\n",location!=0 && location!=-1?"available":"unavailable");
                 if(e.elements)for(CFIndex k=0;k<CFArrayGetCount(e.elements);k++){
                     IOHIDElementRef item=(IOHIDElementRef)CFArrayGetValueAtIndex(e.elements,k);
                     if(IOHIDElementGetType(item)==kIOHIDElementTypeOutput)
@@ -80,9 +83,11 @@ static int open_wheel(int diagnose){
         free(items);
         if(!diagnose && count==1){
             FtecElements e=ftec_elements(selected);const FtecProfile *p=ftec_device_profile(selected);
+            int location=ftec_number(IOHIDDeviceGetProperty(selected,CFSTR("LocationID")));
             if(p->pid!=0x0020 && !allow_experimental){
                 fprintf(stderr,"Experimental base: explicitly enable community testing with --allow-experimental; begin at 3%%.\n");
-            }else if(e.valid && e.output_id>=0){
+            }else if(e.valid && e.output_id>=0 && location!=0 && location!=-1){
+                output_product=p->pid;output_location=(uint32_t)location;
                 output_id=e.output_id;highres=p->highres;wheel=(IOHIDDeviceRef)CFRetain(selected);
                 printf("device=%s USB=0eb7:%04x force_bits=%d output_report=%d\n",p->name,p->pid,highres?16:8,output_id);
             }
@@ -177,7 +182,8 @@ int main(int argc,char **argv){
             received++;now=monotonic_ns();
             if(n!=(ssize_t)sizeof(packet)){rejected++;continue;}
             memcpy(&packet,datagram,sizeof(packet));
-            if(!force_packet_valid(&packet,(size_t)n,now)){rejected++;continue;}
+            if(!force_packet_valid(&packet,(size_t)n,now) ||
+               (live && !force_packet_for_device(&packet,output_product,output_location))){rejected++;continue;}
             double effective_gain=ramp50?ffb_ramp_gain((now-start)/1000000ull,gain):gain;
             uint8_t b[8];if(!translate_force(packet.bytes,16,effective_gain,invert,b)){rejected++;continue;}
             translated++;last_force=now;active=b[1]!=0x03;

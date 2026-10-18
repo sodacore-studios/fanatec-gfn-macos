@@ -18,6 +18,12 @@ int main(void) {
     assert(!force_watchdog_expired(1,100,99));
     assert(!force_watchdog_expired(1,100,250000100));
     assert(force_watchdog_expired(1,100,250000101));
+    p.product_id=0x20;p.location_id=123;
+    assert(force_packet_for_device(&p,0x20,123));
+    assert(!force_packet_for_device(NULL,0x20,123));
+    assert(!force_packet_for_device(&p,0,123));assert(!force_packet_for_device(&p,0x20,0));
+    assert(!force_packet_for_device(&p,6,123));assert(!force_packet_for_device(&p,0x20,456));
+    p.magic=0x31424646u;assert(!force_packet_valid(&p,sizeof(p),100));
     assert(monotonic_ns()>0);
     puts("PASS: packet metadata, freshness boundaries and watchdog boundaries");
 }
