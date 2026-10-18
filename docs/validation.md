@@ -33,3 +33,21 @@ Tests never start GFN, invoke `--live` or send motor commands. Installer tests u
 - Newer GFN versions and long-term compatibility with NVIDIA updates.
 
 A game listing Logitech G29 support may work through the same bridge, but each game's inputs and force behavior should be checked before calling it supported.
+
+## Game-exit force regression
+
+A user reported a persistent leftward force after leaving ACC on v0.4.4.
+The controller STOP did not release it; powering off the base did.
+The local capture contains a game stop packet, and the receiver ended without a
+reported USB error. Successful USB submission does not prove that a stored
+hardware effect was cleared. The previous implementation used only `F3` for stop.
+
+The revised stop path first overwrites constant-force slot 0 with signed zero
+(`0x8000`), explicitly disables that slot (`03 08`), and then sends global stop
+(`F3`). This applies to game stop, zero force, watchdog, startup and normal exit.
+A replacement USB transport checks the actual receiver's ordered output bytes
+following either force direction, without opening hardware.
+With the revised receiver, two opposite 0.2-second impulses at 3% completed
+without reported USB write errors. The user confirmed that no sustained force
+remained and the wheel could be moved in both directions. Repeating the original
+ACC game-exit scenario is still pending; the impulse result does not prove it.

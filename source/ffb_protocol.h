@@ -9,7 +9,17 @@
 #include <string.h>
 #include <math.h>
 static inline void ftec_stop(uint8_t out[8]) {
-    memset(out,0,8);out[0]=1;out[1]=0xf3;
+    // Disable the same slot (0), with the same effect type, that we enable.
+    // hid-fanatecff ftecff_update_slot uses (slot_id << 4) | 0x03.
+    memset(out,0,8);out[0]=1;out[1]=0x03;out[2]=0x08;
+}
+// First replace any retained constant force with signed zero (0x8000),
+// then disable slot 0, then issue the global stop as an additional safeguard.
+static inline void ftec_stop_sequence(uint8_t out[3][8]) {
+    const uint8_t neutral[8]={1,0x01,0x08,0x00,0x80,0,0,1};
+    memcpy(out[0],neutral,8);
+    ftec_stop(out[1]);
+    memset(out[2],0,8);out[2][0]=1;out[2][1]=0xf3;
 }
 static inline int ftec_constant(double normalized,double limit,uint8_t out[8]) {
     if(!out||!isfinite(normalized)||!isfinite(limit)||limit<=0||limit>1.0) return 0;

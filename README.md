@@ -24,7 +24,7 @@ No compiler, Python installation, hardware adapter or paid Apple Developer membe
 - Steering, 25 buttons/hat and two pedals are translated into G29 reports.
 - Recognized constant forces and stop commands are translated into CSL DD commands.
 - Default: **100% passthrough**, **Unlimited**, **immediate output without a ramp**. Set the driving strength in the game.
-- The 250 ms software watchdog stops force after valid game force data disappears. Fresh valid data resumes output.
+- The 250 ms software watchdog sends the neutral/slot-disable/global-stop sequence after valid game force data disappears. Fresh valid data resumes output.
 - STOP, normal app shutdown and controller process exit stop the helper. Unknown effects are rejected.
 - No system driver, Virtual HID entitlement, global library injection or global macOS security changes are used.
 

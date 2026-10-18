@@ -26,7 +26,7 @@ flowchart LR
 
 ## Force translation
 
-The Logitech level is interpreted as `(LL - 128) / 128`, then multiplied by configured gain. Optional inversion is a developer flag; normal operation keeps the validated direction. A nonzero force becomes a Fanatec 8-byte constant-force slot command with signed force scaled by 32767 and offset by 32768. Near-zero output becomes a stop command.
+The Logitech level is interpreted as `(LL - 128) / 128`, then multiplied by configured gain. Optional inversion is a developer flag; normal operation keeps the validated direction. A nonzero force becomes a Fanatec 8-byte constant-force slot command with signed force scaled by 32767 and offset by 32768. Near-zero output becomes a slot-0 disable command. All live stop transitions overwrite slot 0 with neutral high-resolution force, disable slot 0 explicitly, and send global stop. This avoids relying solely on global stop to clear retained force.
 
 Packets must have exact size, expected magic/type/report ID, zero reserved field and a timestamp no more than 100 ms old. Future timestamps are rejected. The drain loop is bounded so packet floods cannot indefinitely postpone watchdog checks. The watchdog stops after more than 250 ms without valid force data. The normal session uses its full selected gain immediately; the separate diagnostic ramp mode is not used by the GUI.
 

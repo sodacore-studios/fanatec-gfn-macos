@@ -164,7 +164,9 @@ static IOReturn capture_output(IOHIDDeviceRef d,IOHIDReportType t,CFIndex id,con
             if(atomic_fetch_add(&force_forwarded,1)==0)log_line("local FFB receiver connected; app remains capture-only");
         }
     }
-    if(count<=256 || count%100==0) {
+    // Preserve shutdown evidence even after periodic force logging is sampled.
+    int stop_packet=b && n==16 && (b[0]==0x13 || b[0]==0xf3 || b[0]==0xf5);
+    if(count<=256 || count%100==0 || stop_packet) {
         char hex[129]={0};CFIndex end=n>64?64:n;
         for(CFIndex i=0;i<end;i++) snprintf(hex+i*2,3,"%02x",b[i]);
         log_line("OUTPUT_CAPTURE_ONLY count=%u type=%d id=%ld length=%ld bytes=%s",count,t,id,n,hex);

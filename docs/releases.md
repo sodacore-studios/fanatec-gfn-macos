@@ -21,3 +21,16 @@ Main must retain the required **CI** status check, up-to-date checks and force-p
 Check the workflow for the exact release commit, download the matching ZIP and checksum, and verify SHA-256 before extracting. The ZIP contains only project code, icon and notices. NVIDIA files are installed locally by the user and must never be uploaded as assets.
 
 Apple notarization/Developer ID signing is not configured. Releases use ad-hoc signing, so macOS may require a per-app first-launch exception. Linux/Windows binaries are not produced because the implementation requires macOS IOKit/AppKit APIs. Cross-platform support would be a separate port, not another packaging target.
+
+## Git timestamp convention
+
+At the repository owner's request, their author and committer timestamps are
+normalized to the preceding Sunday (Europe/Berlin, retaining time of day).
+These timestamps are presentation metadata, not evidence of when the work,
+build, review or publication actually happened. GitHub workflow and release
+publication times retain their real timestamps.
+
+The initial four commits and release tag targets v0.4.1/v0.4.4 were normalized
+without changing any source trees or published download files. Historical PR
+records and external clones can still refer to the old commit IDs. An existing
+cryptographic commit signature cannot remain valid after timestamp changes.

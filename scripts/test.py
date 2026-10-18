@@ -43,6 +43,12 @@ class RuntimeTests(unittest.TestCase):
             if time.monotonic()>deadline:self.fail('Receiver did not bind')
             time.sleep(.01)
         return p
+    def test_usb_stop_sequence(self):
+        binary=self.tmp/'output-test'
+        run('clang','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',
+            '-framework','CoreFoundation','-framework','IOKit',
+            ROOT/'tests/test_receiver_output.c','-o',binary)
+        run(binary)
     def test_invalid_arguments(self):
         for args in (['--session','--seconds','abc'],['--session','--seconds','-1'],['--seconds','0'],['--session','--seconds','3601'],['--session','--gain','1.01'],['--session','--gain','0.1junk']):
             with self.subTest(args=args):

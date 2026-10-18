@@ -13,7 +13,7 @@
 
 At 100%, the bridge does not attenuate the recognized game force. This is not a torque measurement or a promise of the base's rated Nm. The game and base settings still determine the driving force. Output starts immediately: there is no normal-session ramp. Settings cannot be changed while the receiver is running; stop first.
 
-Unlimited has no session timer. The data-loss watchdog remains active: after more than 250 ms without a recognized force/stop packet, the receiver sends stop. Fresh valid packets resume force. Invalid/unsupported packets never keep the watchdog alive. Normal closing of the controller stops the child; the child also checks its parent process.
+Unlimited has no session timer. The data-loss watchdog remains active: after more than 250 ms without a recognized force/stop packet, the receiver sends neutral force, explicitly disables constant-force slot 0, and sends global stop. Fresh valid packets resume force. Invalid/unsupported packets never keep the watchdog alive. Normal closing of the controller stops the child; the child also checks its parent process.
 
 Securely mount the base and start conservatively on a new setup. If forces pull away from the expected direction or oscillate, power off the base. The watchdog is software, **not a hardware emergency stop**: an OS failure, hung receiver or forced kill can prevent stop delivery.
 

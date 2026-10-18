@@ -32,7 +32,13 @@ static IOReturn write_motor(const uint8_t packet[8]){
     if(r!=kIOReturnSuccess){fprintf(stderr,"motor write failed 0x%08x; stopping\n",r);failed=1;quit_requested=1;}
     return r;
 }
-static void stop_motor(void){uint8_t p[8];ftec_stop(p);for(int i=0;i<3;i++)write_motor(p);}
+static void stop_motor(void){
+    uint8_t packets[3][8];ftec_stop_sequence(packets);
+    for(int i=0;i<3;i++)write_motor(packets[i]);
+}
+static void output_force(const uint8_t packet[8]){
+    if(packet[1]==0x03)stop_motor();else write_motor(packet);
+}
 static int open_wheel(void){
     int v=0xeb7,p=0x20;
     CFNumberRef vid=CFNumberCreate(NULL,kCFNumberIntType,&v),pid=CFNumberCreate(NULL,kCFNumberIntType,&p);
@@ -111,7 +117,7 @@ int main(int argc,char **argv){
                 uint8_t b[8];
                 if(phase){ftec_constant((phase==1?1:-1)*gain,gain,b);printf("pulse direction=%d\n",phase==1?1:-1);}
                 else {ftec_stop(b);puts("stop");}
-                write_motor(b);last_phase=phase;
+                output_force(b);last_phase=phase;
             }
             usleep(5000);continue;
         }
@@ -125,9 +131,9 @@ int main(int argc,char **argv){
             if(!force_packet_valid(&packet,(size_t)n,now)){rejected++;continue;}
             double effective_gain=ramp50?ffb_ramp_gain((now-start)/1000000ull,gain):gain;
             uint8_t b[8];if(!translate_force(packet.bytes,16,effective_gain,invert,b)){rejected++;continue;}
-            translated++;last_force=now;active=b[1]!=0xf3;
+            translated++;last_force=now;active=b[1]!=0x03;
             if(memcmp(last,b,8)){
-                if(live)write_motor(b);
+                if(live)output_force(b);
                 memcpy(last,b,8);
                 if(translated<=10 || translated%100==0)printf("force packet=%u source=%02x level=%u command=%02x\n",translated,packet.bytes[2],(unsigned)b[3]+((unsigned)b[4]<<8),b[1]);
             }
