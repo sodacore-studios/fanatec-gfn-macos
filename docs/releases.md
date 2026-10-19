@@ -1,6 +1,6 @@
 # CI and release operations
 
-Every pull request to main and every push to main runs **CI and release**:
+Every branch push and every pull request to main runs **CI and release**:
 
 1. Audit tracked content and all reachable Git history for common private-data patterns and author email hygiene.
 2. Run Gitleaks 8.30.1, verified against a pinned archive SHA-256, on all reachable history.
