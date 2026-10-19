@@ -14,7 +14,7 @@ python3 scripts/package.py --arch universal --version 0.4.0
 
 The C and Swift runtime uses only Apple system frameworks. Python is used for build and test orchestration. Add deterministic tests for protocol and installer changes. Tests must never access a physical motor, launch a game or depend on credentials, a NVIDIA installation or a network service.
 
-Use a GitHub noreply email for commits. Do not commit logs, personal paths, device/user identifiers, environment files, credentials, proprietary binaries or internal project information. Before sharing diagnostics, inspect and redact them. The full reachable Git history is scanned in CI.
+Use a GitHub noreply email for commits and enable **Keep my email addresses private** in GitHub Settings → Emails before opening pull requests. GitHub can otherwise place your account email in its automatically generated PR test-merge commits. Do not commit logs, personal paths, device/user identifiers, environment files, credentials, proprietary binaries or internal project information. Before sharing diagnostics, inspect and redact them. The full reachable Git history is scanned in CI.
 
 Open a pull request for main. The aggregate **CI** check must pass before merge; releases are created only after all checks succeed on main. See [release operations](docs/releases.md).
 

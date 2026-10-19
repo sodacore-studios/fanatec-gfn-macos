@@ -2,7 +2,7 @@
 
 Every branch push and every pull request to main runs **CI and release**:
 
-1. Audit tracked content and all reachable Git history for common private-data patterns and author email hygiene.
+1. Audit tracked content and all reachable authored Git history for common private-data patterns and author email hygiene. On PRs, this job checks out the submitted head; GitHub-generated temporary merge metadata is outside the source history. Build/test jobs still exercise the PR merge result.
 2. Run Gitleaks 8.30.1, verified against a pinned archive SHA-256, on all reachable history.
 3. On both Apple Silicon (`macos-15`) and Intel (`macos-15-intel`): run isolated unit/runtime tests, coverage gates, native installer fixtures and the application build.
 4. Verify signatures and the release ZIP's exact component allowlist. Reject build-machine home paths in bundled files.

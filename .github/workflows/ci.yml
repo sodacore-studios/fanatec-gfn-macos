@@ -17,6 +17,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          # Audit authored history; GitHub creates ephemeral PR merge commits itself.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Check tracked files and all reachable history
         run: python3 scripts/audit.py --history
