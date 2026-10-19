@@ -24,6 +24,9 @@ The application is locally/ad-hoc signed. It has **no Developer ID signature or 
 
 ## Prepare the GFN copy
 
+On a fresh installation, **Open GeForce NOW** offers setup instead of attempting to launch a missing file. After successful setup through that button, the managed copy opens automatically. Force feedback remains off until you explicitly start it. Missing bridge files or an executable replaced by an update trigger the repair flow.
+
+
 1. Close any previously managed GFN copy and stop force feedback.
 2. Launch Fanatec GFN and click **Install / repair GFN bridge…**.
 3. Select the original `GeForceNOW.app`, usually in `/Applications`.

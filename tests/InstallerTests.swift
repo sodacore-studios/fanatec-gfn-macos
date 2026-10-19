@@ -47,6 +47,30 @@ struct InstallerTests {
         do {try Installer.install(source:source,destination:destination,resources:temporary);fatalError("Unknown version accepted")}
         catch {precondition(!FileManager.default.fileExists(atPath:destination.path))}
         let check6 = try Data(contentsOf:source.appendingPathComponent("Contents/Info.plist"))==info; precondition(check6)
+        let readiness = temporary.appendingPathComponent("Readiness.app")
+        let fm = FileManager.default
+        precondition(Installer.managedAppState(at: readiness) == .missing)
+        try fm.createDirectory(at: readiness.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
+        precondition(Installer.managedAppState(at: readiness) == .needsRepair)
+        let executable = readiness.appendingPathComponent("Contents/MacOS/GeForceNOW")
+        try Data(MachOPatcher.library.utf8).write(to: executable)
+        let launchInfo = try PropertyListSerialization.data(fromPropertyList: ["CFBundleExecutable": "GeForceNOW"], format: .xml, options: 0)
+        try launchInfo.write(to: readiness.appendingPathComponent("Contents/Info.plist"))
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        precondition(Installer.managedAppState(at: readiness) == .needsRepair)
+        try fm.createDirectory(at: readiness.appendingPathComponent("Contents/Frameworks"), withIntermediateDirectories: true)
+        let bridge = readiness.appendingPathComponent("Contents/Frameworks/FanatecBridge.dylib")
+        try Data([0]).write(to: bridge)
+        precondition(Installer.managedAppState(at: readiness) == .ready)
+        try Data("vendor updated executable without bridge".utf8).write(to: executable)
+        precondition(Installer.managedAppState(at: readiness) == .needsRepair)
+        try Data(MachOPatcher.library.utf8).write(to: executable)
+        try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: executable.path)
+        precondition(Installer.managedAppState(at: readiness) == .needsRepair)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        try Data("invalid plist".utf8).write(to: readiness.appendingPathComponent("Contents/Info.plist"))
+        precondition(Installer.managedAppState(at: readiness) == .needsRepair)
+        print("PASS: missing, incomplete, updated and ready managed-app states")
         print("PASS: native installer thin/fat patching, idempotency, malformed input, padding and unknown version rejection")
     }
 }

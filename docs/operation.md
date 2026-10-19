@@ -5,7 +5,7 @@
 | Control | Behavior |
 |---|---|
 | Install / repair | Validate and create a separate GFN copy; disabled while force feedback is active |
-| Open GeForce NOW | Open the managed copy |
+| Open GeForce NOW | Open the managed copy, or guide setup/repair if it is missing or incomplete |
 | Passthrough | 10, 25, 50, 75 or 100 percent; default 100 |
 | Duration | Unlimited (default), 5, 15, 30 or 60 minutes |
 | Start force feedback | Start the physical USB receiver explicitly |
@@ -32,6 +32,7 @@ The socket is local to the user. Logs can contain process IDs, paths, device met
 | Symptom | Check / action |
 |---|---|
 | Unsupported GFN version or checksum | Installer intentionally refuses it. Report version and sanitized diagnostic details; do not bypass the check. |
+| File not found with release 0.4.1 | Run Install / repair once to create the managed copy. Newer releases offer setup from Open GeForce NOW. |
 | Wheel absent in game | Red PC mode, USB connection, managed GFN copy, correct game controller settings. |
 | Inputs work but no FFB | Start FFB in controller; check game FFB settings and `session.log`. Other effect formats may be unsupported. |
 | Bridge missing after update | Stop FFB and close GFN. Run Install / repair with a supported original client. An unknown version needs review. |
